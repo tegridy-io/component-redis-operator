@@ -1,0 +1,4 @@
+parameters:
+  redis_operator:
+    =_metadata: {}
+    namespace: syn-redis-operator

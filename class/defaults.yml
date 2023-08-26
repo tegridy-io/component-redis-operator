@@ -1,4 +1,39 @@
 parameters:
   redis_operator:
     =_metadata: {}
+
     namespace: syn-redis-operator
+
+    charts:
+      operator:
+        source: https://ot-container-kit.github.io/helm-charts
+        version: v0.15.9
+
+    images:
+      redis:
+        registry: quay.io
+        repository: opstree/redis
+        tag: v7.0.12
+      sentinel:
+        registry: quay.io
+        repository: opstree/redis-sentinel
+        tag: v7.0.12
+      exporter:
+        registry: quay.io
+        repository: opstree/redis-exporter
+        tag: v1.48.0
+
+    replicaCount: 1
+
+    resources:
+      operator:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 100m
+          memory: 256Mi
+
+    helmValues:
+      resources: ${redis_operator:resources:operator}
+      replicas: ${redis_operator:replicaCount}

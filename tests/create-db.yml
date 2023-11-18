@@ -1,0 +1,27 @@
+applications:
+  - prometheus
+
+parameters:
+  kapitan:
+    dependencies:
+      - type: https
+        source: https://raw.githubusercontent.com/projectsyn/component-prometheus/master/lib/prometheus.libsonnet
+        output_path: vendor/lib/prometheus.libsonnet
+
+  prometheus:
+    defaultInstance: system
+
+  redis_operator:
+    databases:
+      replication:
+        namespace: app-redis
+        type: replication
+        nodes: 3
+        storage:
+          accessMode: ReadWriteOnce
+          storageClass: ''
+          size: 1Gi
+      cluster:
+        namespace: app-redis
+        type: cluster
+        nodes: 3

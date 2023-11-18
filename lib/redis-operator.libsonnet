@@ -1,8 +1,102 @@
+local com = import 'lib/commodore.libjsonnet';
 local kap = import 'lib/kapitan.libjsonnet';
 local kube = import 'lib/kube.libjsonnet';
 local inv = kap.inventory();
 // The hiera parameters for the component
 local params = inv.parameters.redis_operator;
+
+
+local defaultKubeConfig(image) = {
+  image: '%(registry)s/%(repository)s:%(tag)s' % image,
+  imagePullPolicy: 'IfNotPresent',
+  resources: {
+    requests: {
+      cpu: '100m',
+      memory: '128Mi',
+    },
+    limits: {
+      cpu: '100m',
+      memory: '128Mi',
+    },
+  },
+};
+
+local defaultExporter(image) = {
+  enabled: true,
+  image: '%(registry)s/%(repository)s:%(tag)s' % image,
+  imagePullPolicy: 'IfNotPresent',
+  resources: {
+    requests: {
+      cpu: '100m',
+      memory: '128Mi',
+    },
+    limits: {
+      cpu: '100m',
+      memory: '128Mi',
+    },
+  },
+};
+
+local defaultAffinity(name) = {
+  podAntiAffinity: {
+    requiredDuringSchedulingIgnoredDuringExecution: [
+      {
+        labelSelector: {
+          matchExpressions: [
+            {
+              key: 'app.kubernetes.io/component',
+              operator: 'In',
+              values: [ 'redis' ],
+            },
+            {
+              key: 'app.kubernetes.io/name',
+              operator: 'In',
+              values: [ name ],
+            },
+          ],
+        },
+        topologyKey: 'kubernetes.io/hostname',
+      },
+    ],
+  },
+};
+
+
+/**
+  * \brief Helper to create RedisReplication objects.
+  *
+  * \arg The name of the database.
+  * \return A RedisReplication object.
+  */
+local replication(name, namespace, spec) = kube._Object('redis.redis.opstreelabs.in/v1beta2', 'RedisReplication', name) {
+  assert spec.nodes >= 3 : 'Parameter nodes should be >= 3.',
+  assert spec.nodes % 2 != 0 : 'Parameter nodes should be a odd number.',
+  metadata+: {
+    labels+: {
+      'app.kubernetes.io/component': 'redis',
+      'app.kubernetes.io/managed-by': 'commodore',
+      'app.kubernetes.io/name': name,
+    },
+    namespace: namespace,
+  },
+  spec+: {
+    affinity: defaultAffinity(name),
+    clusterSize: spec.nodes,
+    kubernetesConfig: defaultKubeConfig(params.images.redis),
+    redisExporter: defaultExporter(params.images.exporter),
+    storage: {
+      volumeClaimTemplate: {
+        spec: {
+          accessModes: [ spec.storage.accessMode ],
+          storageClassName: spec.storage.storageClass,
+          resources: {
+            requests: { storage: spec.storage.size },
+          },
+        },
+      },
+    },
+  },
+};
 
 
 /**
@@ -11,155 +105,50 @@ local params = inv.parameters.redis_operator;
   * \arg The name of the database.
   * \return A RedisCluster object.
   */
-local cluster(name, namespace, spec) = kube._Object('redis.redis.opstreelabs.in/v1beta1', 'RedisCluster', name) {
+local cluster(name, namespace, spec) = kube._Object('redis.redis.opstreelabs.in/v1beta2', 'RedisCluster', name) {
   assert spec.nodes >= 3 : 'Parameter nodes should be >= 3.',
   assert spec.nodes % 2 != 0 : 'Parameter nodes should be a odd number.',
+  local persistenceEnabled = std.get(spec, 'persistenceEnabled', false),
   metadata+: {
     labels+: {
-      'app.kubernetes.io/component': 'cache',
+      'app.kubernetes.io/component': 'redis',
       'app.kubernetes.io/managed-by': 'commodore',
       'app.kubernetes.io/name': name,
     },
     namespace: namespace,
   },
   spec+: {
+    affinity: defaultAffinity(name),
+    clusterVersion: std.split(params.images.redis.tag, '.')[0],
     clusterSize: spec.nodes,
-    clusterVersion: std.split(params.images.redis.version, '.'),
-    persistenceEnabled: true,
-    //    podSecurityContext: {
-    //      runAsUser: 1000,
-    //      fsGroup: 1000,
-    //    },
-    kubernetesConfig: {
-      image: '%(registry)s/%(repository)s:%(tag)s' % params.images.redis,
-      imagePullPolicy: IfNotPresent,
-      //      resources: {
-      //        requests:
-      //          cpu: 101m
-      //          memory: 128Mi
-      //        limits:
-      //          cpu: 101m
-      //          memory: 128Mi
-      //          # redisSecret:
-      //          #   name: redis-secret
-      //          #   key: password
-      //          # imagePullSecrets:
-      //          #   - name: regcred
+    persistenceEnabled: persistenceEnabled,
+    kubernetesConfig: defaultKubeConfig(params.images.redis),
+    redisExporter: defaultExporter(params.images.exporter),
+    storage: if !persistenceEnabled then {
+      volumeMount: {
+        volume: [
+          { name: 'node-conf', emptyDir: { sizeLimit: '1Mi' } },
+        ],
+        mountPath: [
+          { name: 'node-conf', mountPath: '/node-conf' },
+        ],
+      },
+    } else {
+      volumeClaimTemplate: {
+        spec: {
+          accessModes: [ spec.storage.accessMode ],
+          storageClassName: spec.storage.storageClass,
+          resources: {
+            requests: { storage: spec.storage.size },
+          },
+        },
+      },
     },
-    //      redisExporter:
-    //        enabled: false
-    //        image: quay.io/opstree/redis-exporter:v1.44.0
-    //        imagePullPolicy: Always
-    //        resources:
-    //          requests:
-    //            cpu: 100m
-    //            memory: 128Mi
-    //          limits:
-    //            cpu: 100m
-    //            memory: 128Mi
-    //            # Environment Variables for Redis Exporter
-    //            # env:
-    //            # - name: REDIS_EXPORTER_INCL_SYSTEM_METRICS
-    //            #   value: "true"
-    //            # - name: UI_PROPERTIES_FILE_NAME
-    //            #   valueFrom:
-    //            #     configMapKeyRef:
-    //            #       name: game-demo
-    //            #       key: ui_properties_file_name
-    //            # - name: SECRET_USERNAME
-    //            #   valueFrom:
-    //            #     secretKeyRef:
-    //            #       name: mysecret
-    //            #       key: username
-    //            #  redisLeader:
-    //            #    redisConfig:
-    //            #      additionalRedisConfig: redis-external-config
-    //            #  redisFollower:
-    //            #    redisConfig:
-    //            #      additionalRedisConfig: redis-external-config
-    //      storage:
-    //        volumeClaimTemplate:
-    //          spec:
-    //            # storageClassName: standard
-    //            accessModes: ["ReadWriteOnce"]
-    //            resources:
-    //              requests:
-    //                storage: 1Gi
-    //        nodeConfVolume: true
-    //        nodeConfVolumeClaimTemplate:
-    //          spec:
-    //            accessModes: ["ReadWriteOnce"]
-    //            resources:
-    //              requests:
-    //                storage: 1Gi
-    //                # nodeSelector:
-    //                #   kubernetes.io/hostname: minikube
-    //                # priorityClassName:
-    //                # Affinity:
-    //                # Tolerations: []
   },
 };
 
 
-/**
-  * \brief Helper to create CockroachDB client.
-  *
-  * \arg The name of the database client.
-  * \return A Deployment object.
-  */
-// local client(name, namespace) = kube.Deployment(name + '-client') {
-//   metadata+: {
-//     labels+: {
-//       'app.kubernetes.io/component': 'database-client',
-//       'app.kubernetes.io/managed-by': 'commodore',
-//       'app.kubernetes.io/name': name + '-client',
-//     },
-//     namespace: namespace,
-//   },
-//   spec+: {
-//     replicas: 1,
-//     template+: {
-//       spec+: {
-//         serviceAccountName: 'default',
-//         securityContext: {
-//           seccompProfile: { type: 'RuntimeDefault' },
-//         },
-//         containers_:: {
-//           default: kube.Container('client') {
-//             image: '%(registry)s/%(repository)s:%(tag)s' % params.images.cockroach,
-//             env_:: {
-//               COCKROACH_CERTS_DIR: '/cockroach/certs-dir',
-//               COCKROACH_HOST: name + '-public',
-//             },
-//             command: [ 'sleep', 'infinity' ],
-//             securityContext: {
-//               allowPrivilegeEscalation: false,
-//               capabilities: { drop: [ 'ALL' ] },
-//             },
-//             volumeMounts_:: {
-//               certs: { mountPath: '/cockroach/certs-dir' },
-//             },
-//           },
-//         },
-//         volumes_:: {
-//           certs: {
-//             secret: {
-//               secretName: name + '-root',
-//               items: [
-//                 { key: 'ca.crt', path: 'ca.crt' },
-//                 { key: 'tls.crt', path: 'client.root.crt' },
-//                 { key: 'tls.key', path: 'client.root.key' },
-//               ],
-//             },
-//           },
-//         },
-//       },
-//     },
-//   },
-// };
-
-
 {
+  replication: replication,
   cluster: cluster,
-  //   client: client,
 }

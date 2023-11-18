@@ -21,7 +21,7 @@ parameters:
       exporter:
         registry: quay.io
         repository: opstree/redis-exporter
-        tag: v1.48.0
+        tag: v1.45.0
 
     replicaCount: 1
 
@@ -33,6 +33,8 @@ parameters:
         limits:
           cpu: 100m
           memory: 256Mi
+
+    databases: {}
 
     helmValues:
       resources: ${redis_operator:resources:operator}

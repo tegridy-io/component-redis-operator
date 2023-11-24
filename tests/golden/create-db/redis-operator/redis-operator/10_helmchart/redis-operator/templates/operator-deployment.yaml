@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/instance: redis-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: redis-operator
+    app.kubernetes.io/part-of: redis-operator
+    app.kubernetes.io/version: 0.15.1
+    helm.sh/chart: redis-operator-0.15.9
+  name: redis-operator
+  namespace: syn-redis-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: redis-operator
+  template:
+    metadata:
+      annotations:
+        cert-manager.io/inject-ca-from: syn-redis-operator/serving-cert
+      labels:
+        name: redis-operator
+    spec:
+      containers:
+        - args:
+            - --leader-elect
+          command:
+            - /manager
+          env:
+            - name: ENABLE_WEBHOOKS
+              value: 'false'
+          image: quay.io/opstree/redis-operator:v0.15.1
+          imagePullPolicy: Always
+          name: redis-operator
+          resources:
+            limits:
+              cpu: 100m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+      serviceAccount: redis-operator
+      serviceAccountName: redis-operator

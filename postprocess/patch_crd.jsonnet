@@ -8,7 +8,15 @@ local listTemplates = [
   for name in com.list_dir(std.extVar('output_path'), basename=true)
 ];
 
+local argocdPatch = {
+  metadata+: {
+    annotations+: {
+      'argocd.argoproj.io/sync-options': 'Replace=true',
+    },
+  },
+};
+
 {
-  [template.name]: std.filter(function(it) it != null, template.manifest)
+  [template.name]: std.filterMap(function(it) it != null, function(it) it + argocdPatch, template.manifest)
   for template in listTemplates
 }

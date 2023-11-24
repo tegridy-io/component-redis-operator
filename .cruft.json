@@ -1,13 +1,13 @@
 {
   "template": "https://github.com/projectsyn/commodore-component-template.git",
-  "commit": "dcae06138d227340acb8056d0d031f32d75c09b5",
+  "commit": "8a2e7800ac2d62a4827968ce108f4d7b9bfd587f",
   "checkout": "main",
   "context": {
     "cookiecutter": {
       "name": "Redis Operator",
       "slug": "redis-operator",
       "parameter_key": "redis_operator",
-      "test_cases": "defaults",
+      "test_cases": "defaults create-db",
       "add_lib": "n",
       "add_pp": "n",
       "add_golden": "y",
